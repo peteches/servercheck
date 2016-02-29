@@ -22,49 +22,49 @@ class TestFile:
         self.test_string = 'Hello, looking for me?'
         self.missing_string = 'HAHA you will never catch me!!'
 
-    def setup(self):
         with open(self.file_that_exists, 'w') as fd:
             fd.writelines([self.test_string])
 
-        self.f = servercheck.File(self.file_that_exists)
-        self.no_f = servercheck.File(self.file_that_does_not_exist)
+    def setup(self):
+        self.file_exists = servercheck.File(self.file_that_exists)
+        self.file_does_not_exist = servercheck.File(self.file_that_does_not_exist)  # nopep8
 
-        self.d = servercheck.File(self.tmpdir)
+        self.dir = servercheck.File(self.tmpdir)
 
-        self.s = servercheck.File(self.link)
+        self.symlink = servercheck.File(self.link)
 
     def test_true_file_exists(self):
-        assert_true(self.f.exists(), 'File exists')
+        assert_true(self.file_exists.exists(), 'File exists')
 
     def test_false_file_exists(self):
-        assert_false(self.no_f.exists(), 'File Missing')
+        assert_false(self.file_does_not_exist.exists(), 'File Missing')
 
     def test_true_file_mode(self):
-        assert_true(self.f.mode(644))
+        assert_true(self.file_exists.mode(644))
 
     def test_false_file_mode(self):
-        assert_false(self.f.mode(775))
+        assert_false(self.file_exists.mode(775))
 
     def test_true_file_is_file(self):
-        assert_true(self.f.is_file())
+        assert_true(self.file_exists.is_file())
 
     def test_false_file_is_file(self):
-        assert_false(self.d.is_file())
+        assert_false(self.dir.is_file())
 
     def test_true_file_is_dir(self):
-        assert_true(self.d.is_dir())
+        assert_true(self.dir.is_dir())
 
     def test_false_file_is_dir(self):
-        assert_false(self.f.is_dir())
+        assert_false(self.file_exists.is_dir())
 
     def test_true_file_is_symlinked_to(self):
-        assert_true(self.s.is_symlinked_to(self.file_that_exists))
+        assert_true(self.symlink.is_symlinked_to(self.file_that_exists))
 
     def test_false_file_is_symlinked_to(self):
-        assert_false(self.s.is_symlinked_to(self.file_that_does_not_exist))
+        assert_false(self.symlink.is_symlinked_to(self.file_that_does_not_exist))  # nopep8
 
     def test_true_file_has_string(self):
-        assert_true(self.f.has_string(self.test_string))
+        assert_true(self.file_exists.has_string(self.test_string))
 
     def test_false_file_has_string(self):
-        assert_false(self.f.has_string(self.missing_string))
+        assert_false(self.file_exists.has_string(self.missing_string))
