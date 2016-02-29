@@ -1,1 +1,1 @@
-from .file import File
+from servercheck.file import FileTester
