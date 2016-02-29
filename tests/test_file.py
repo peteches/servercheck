@@ -3,6 +3,9 @@
 import os
 import tempfile
 import servercheck
+import itertools
+import stat
+import random
 
 from nose.tools import *
 from testfixtures import LogCapture
@@ -71,8 +74,42 @@ class TestFile:
              ),
         )
 
-    def test_true_file_mode(self):
-        self.file_exists.mode(644)
+    def generate_file_perms(self, num):
+
+        def tup2str(t):
+            return ''.join(map(str, t))
+
+        rwx_perms = set(map(lambda x: x[0] | x[1] | x[2] | x[3],
+                            itertools.combinations_with_replacement([4, 2, 1, 0],  # nopep8
+                                                                    4)))
+        perms = [tup2str(x)
+                 for x in itertools.permutations(rwx_perms, 4)]
+
+        random.shuffle(perms)
+
+        return perms[1:num]
+
+    def check_incorrect_file_mode(self, file_mode, test_mode):
+        m = stat.S_IMODE(int(str(file_mode), 8))
+        os.chmod(self.file_that_exists, m)
+        ft = servercheck.FileTester(self.file_that_exists,
+                                    verbose=True)
+        ft.mode(test_mode)
+
+        self.log_capture.check(
+            (self.log_name.format(self.file_that_exists),
+             'WARNING',
+             self.fail_str.format(self.file_that_exists,
+                                  'does not have expected permissions.')
+             ),
+        )
+
+    def check_correct_file_mode(self, mode):
+        m = stat.S_IMODE(int(str(mode), 8))
+        os.chmod(self.file_that_exists, m)
+        ft = servercheck.FileTester(self.file_that_exists,
+                                    verbose=True)
+        ft.mode(mode)
 
         self.log_capture.check(
             (self.log_name.format(self.file_that_exists),
@@ -82,16 +119,14 @@ class TestFile:
              ),
         )
 
-    def test_false_file_mode(self):
-        self.file_exists.mode(775)
+    def test_correct_file_perms(self):
+        for p in self.generate_file_perms(50):
+            yield self.check_correct_file_mode, p
 
-        self.log_capture.check(
-            (self.log_name.format(self.file_that_exists),
-             'WARNING',
-             self.fail_str.format(self.file_that_exists,
-                                  'does not have expected permissions.')
-             ),
-        )
+    def test_incorrect_file_perms(self):
+        for x, y in zip(self.generate_file_perms(50),
+                        self.generate_file_perms(50)):
+            yield self.check_incorrect_file_mode, x, y
 
     def test_true_file_is_file(self):
         self.file_exists.is_file()
