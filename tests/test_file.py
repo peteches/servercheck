@@ -248,3 +248,38 @@ class TestFile:
                                   'does not contain the string: "{}".'.format(self.missing_string))  # nopep8
              ),
         )
+
+    def check_excecute_perms(self, p, u):
+        os.chmod(self.file_that_exists, int(str(p), 8))
+
+        ft = servercheck.FileTester(self.file_that_exists,
+                                    verbose=True)
+        ft.is_executable_by(u)
+
+        if u == 'user':
+            mask = stat.S_IXUSR
+        elif u == 'group':
+            mask = stat.S_IXGRP
+        elif u == 'other':
+            mask = stat.S_IXOTH
+
+        if int(str(p), 8) & mask:
+            lvl = 'INFO'
+            msg = self.pass_str.format(self.file_that_exists,
+                                       'is executable by {}.'.format(u))
+        else:
+            lvl = 'WARNING'
+            msg = self.fail_str.format(self.file_that_exists,
+                                       'is not executable by {}.'.format(u))
+
+        self.log_capture.check(
+            (self.log_name.format(self.file_that_exists),
+             lvl,
+             msg
+             )
+        )
+
+    def test_executable_generator(self):
+        for i in ['user', 'group', 'other']:
+            for p in self.generate_file_perms(20):
+                yield self.check_excecute_perms, p, i

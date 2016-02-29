@@ -84,7 +84,7 @@ class FileTester(BaseTester):
     def mode(self, mode):
         """Tests if file permissions match mode.
 
-        :param int mode: File perms in octal
+        :param int mode: File perms
 
 
         """
@@ -122,3 +122,18 @@ class FileTester(BaseTester):
             self.passed('contains the string: "{}".'.format(string))
         else:
             self.failed('does not contain the string: "{}".'.format(string))
+
+    def is_executable_by(self, x):
+        file_perm = stat.S_IMODE(self._stat.st_mode)
+
+        if x == 'user':
+            mask = stat.S_IXUSR
+        elif x == 'group':
+            mask = stat.S_IXGRP
+        elif x == 'other':
+            mask = stat.S_IXOTH
+
+        if file_perm & mask:
+            self.passed('is executable by {}.'.format(x))
+        else:
+            self.failed('is not executable by {}.'.format(x))
