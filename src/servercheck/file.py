@@ -24,8 +24,10 @@ class FileTester(BaseTester):
         self._file_path = file_path
         super().__init__(item=file_path, **kwargs)
 
-        if os.path.exists(self._file_path):
+        try:
             self._stat = os.stat(self._file_path)
+        except FileNotFoundError:
+            self._stat = None
 
     def passed(self, msg):
         super().passed('File {} {}'.format(self._file_path,
@@ -35,12 +37,18 @@ class FileTester(BaseTester):
         super().failed('File {} {}'.format(self._file_path,
                                            msg))
 
+    def test_mask_perms(self, mask):
+
+        try:
+            return bool(self._stat.st_mode & mask)
+        except:
+            return False
+
     def exists(self):
         """Test if file exists
 
-
         """
-        if os.path.exists(self._file_path):
+        if self._stat:
             self.passed('exists.')
         else:
             self.failed('does not exist.')
@@ -57,7 +65,7 @@ class FileTester(BaseTester):
             msg = 'is not a regular file. {} '.format(self._file_path)
 
             if os.path.isdir(self._file_path):
-                msg += 'is a directory.'
+                msg += 'is a dir.'
             elif os.path.islink(self._file_path):
                 msg += 'is a symlink.'
 
