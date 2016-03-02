@@ -6,9 +6,20 @@ import servercheck
 import itertools
 import stat
 import random
+import string
 
 from nose.tools import *
 from testfixtures import LogCapture
+
+
+class TestFileTester(servercheck.FileTester):
+
+    __test__ = False
+
+    def __init__(self, fp, **kwargs):
+        super().__init__(fp,
+                         verbose=True,
+                         **kwargs)
 
 
 class TestFile:
@@ -29,53 +40,37 @@ class TestFile:
         self.pass_str = '\033[1;32mPASS: File {} {}\033[0m'
         self.fail_str = '\033[1;31mFAIL: File {} {}\033[0m'
 
-        self.log_name = 'servercheck.FileTester.{}'
+        self.log_name = 'servercheck.TestFileTester.{}'
 
         with open(self.file_that_exists, 'w') as fd:
             fd.writelines([self.test_string])
 
+        self._file_types = ['reg',
+                            'dir',
+                            'symlink',
+                            'broken_symlink',
+                            'missing',
+                            ]
+
+        self._file_type = {
+            'reg': 'regular file',
+            'dir': 'directory',
+            'symlink': 'symlink',
+            'broken_symlink': 'symlink',
+        }
+
     def setup(self):
-        self.file_exists = servercheck.FileTester(self.file_that_exists,
-                                                  verbose=True)
-        self.file_does_not_exist = servercheck.FileTester(self.file_that_does_not_exist,  # nopep8
-                                                          verbose=True)
-        self.dir = servercheck.FileTester(self.tmpdir,
-                                          verbose=True)
-        self.symlink = servercheck.FileTester(self.link,
-                                              verbose=True)
+        self.file_exists = TestFileTester(self.file_that_exists)
+        self.file_does_not_exist = TestFileTester(self.file_that_does_not_exist)  # nopep8
+        self.dir = TestFileTester(self.tmpdir)
+        self.symlink = TestFileTester(self.link)
 
         self.log_capture = LogCapture()
 
     def teardown(self):
         self.log_capture.uninstall()
 
-    def test_file_path_attribute(self):
-        assert_equal(self.file_exists._file_path, self.file_that_exists)
-
-    def test_true_file_exists(self):
-        self.file_exists.exists()
-
-        self.log_capture.check(
-            (self.log_name.format(self.file_that_exists),
-             'INFO',
-             self.pass_str.format(self.file_that_exists,
-                                  'exists.'),
-             ),
-        )
-
-    def test_false_file_exists(self):
-        self.file_does_not_exist.exists()
-
-        self.log_capture.check(
-            (self.log_name.format(self.file_that_does_not_exist),
-             'WARNING',
-             self.fail_str.format(self.file_that_does_not_exist,
-                                  'does not exist.'),
-             ),
-        )
-
     def generate_file_perms(self, num):
-
         def tup2str(t):
             return ''.join(map(str, t))
 
@@ -89,11 +84,176 @@ class TestFile:
 
         return perms[1:num]
 
+    def create_file(self, ft='reg', mode=644, content=None):
+        if ft == 'reg':
+            path = tempfile.mkstemp(dir=self.tmpdir)[1]
+        elif ft == 'dir':
+            path = tempfile.mkdtemp(dir=self.tmpdir)
+        elif ft == 'symlink':
+            link_dst = tempfile.mkstemp(dir=self.tmpdir)[1]
+            path = tempfile.mktemp(dir=self.tmpdir)
+            os.symlink(link_dst, path)
+        elif ft == 'broken_symlink':
+            link_dst = tempfile.mkstemp(dir=self.tmpdir)[1]
+            path = tempfile.mktemp(dir=self.tmpdir)
+            os.symlink(link_dst, path)
+            os.remove(link_dst)
+        elif ft == 'missing':
+            path = tempfile.mktemp()
+
+        if ft in ['reg', 'symlink'] \
+                and content:
+            with open(path, 'w') as fd:
+                fd.write(content)
+
+        if ft not in ['missing', 'broken_symlink']:
+            os.chmod(path,
+                     int(str(mode), 8))
+
+        return path
+
+    def test_file_path_attribute(self):
+        assert_equal(self.file_exists._file_path, self.file_that_exists)
+
+    def check_exists(self, file_type):
+        p = self.create_file(ft=file_type)
+        filetester = TestFileTester(p)
+
+        filetester.exists()
+
+        if file_type == 'missing':
+            lvl = 'WARNING'
+            msg = self.fail_str.format(p, 'does not exist.')
+        else:
+            lvl = 'INFO'
+            msg = self.pass_str.format(p, 'exists.')
+
+        self.log_capture.check(
+            (
+                self.log_name.format(p),
+                lvl,
+                msg,
+            ),
+        )
+
+    def test_exists_checks(self):
+        for file_type in self._file_types:
+            yield self.check_exists, file_type
+
+    def check_is_file(self, file_type):
+        p = self.create_file(ft=file_type)
+        filetester = TestFileTester(p)
+        if file_type == 'reg':
+            lvl = 'INFO'
+            msg = self.pass_str.format(p, 'is a regular file.')
+        elif file_type == 'missing':
+            lvl = 'WARNING'
+            msg = self.fail_str.format(p, 'does not exist.')
+        else:
+            lvl = 'WARNING'
+            msg = self.fail_str.format(p, 'is not a regular file.')
+
+        filetester.is_file()
+
+        self.log_capture.check(
+            (
+                self.log_name.format(p),
+                lvl,
+                msg,
+            ),
+        )
+
+    def test_is_file_checks(self):
+        for file_type in self._file_types:
+            yield self.check_is_file, file_type
+
+    def check_file_is_dir(self, file_type):
+        p = self.create_file(ft=file_type)
+
+        filetester = TestFileTester(p)
+
+        if file_type == 'dir':
+            lvl = 'INFO'
+            msg = self.pass_str.format(p,
+                                       'is a {}.'.format(self._file_type[file_type]))  # nopep8
+        elif file_type == 'missing':
+            lvl = 'WARNING'
+            msg = self.fail_str.format(p, 'does not exist.')
+        else:
+            lvl = 'WARNING'
+            msg = self.fail_str.format(p, 'is not a directory.'
+                                       ' {} is a {}.'.format(p,
+                                                            self._file_type[file_type]))  # nopep8
+
+        filetester.is_dir()
+
+        self.log_capture.check(
+            (self.log_name.format(p),
+             lvl,
+             msg,
+             ),
+        )
+
+    def test_is_dir_checks(self):
+        for ft in self._file_types:
+            yield self.check_file_is_dir, ft
+
+    def check_is_symlink(self, file_type):
+        p = self.create_file(ft=file_type)
+
+        filetester = TestFileTester(p)
+
+        if file_type in ['symlink', 'broken_symlink']:
+            lvl = 'INFO'
+            msg = self.pass_str.format(p, 'is a symlink.')
+        elif file_type == 'missing':
+            lvl = 'WARNING'
+            msg = self.fail_str.format(p, 'does not exist.')
+        else:
+            lvl = 'WARNING'
+            msg = self.fail_str.format(p, 'is not a symlink.')
+
+        filetester.is_symlink()
+
+        self.log_capture.check(
+            (
+                self.log_name.format(p),
+                lvl,
+                msg,
+            ),
+        )
+
+    def test_is_symlink_checks(self):
+        for ft in self._file_types:
+            yield self.check_is_symlink, ft
+
+    def check_true_is_symlinked_to(self, file_type):
+        src = self.create_file(file_type)
+        dst = tempfile.mktemp()
+        os.symlink(src, dst)
+
+        filetester = TestFileTester(dst)
+
+        filetester.is_symlinked_to(src)
+
+        self.log_capture.check(
+            (
+                self.log_name.format(dst),
+                'INFO',
+                self.pass_str.format(dst,
+                                     'is symlinked to {}.'.format(src))
+            ),
+        )
+
+    def test_is_symlinked_to(self):
+        for ft in [x for x in self._file_types
+                   if x != 'missing']:
+            yield self.check_true_is_symlinked_to, ft
+
     def check_incorrect_file_mode(self, file_mode, test_mode):
         m = stat.S_IMODE(int(str(file_mode), 8))
         os.chmod(self.file_that_exists, m)
-        ft = servercheck.FileTester(self.file_that_exists,
-                                    verbose=True)
+        ft = TestFileTester(self.file_that_exists)
         ft.mode(test_mode)
 
         self.log_capture.check(
@@ -104,11 +264,15 @@ class TestFile:
              ),
         )
 
+    def test_incorrect_file_perms(self):
+        for x, y in zip(self.generate_file_perms(50),
+                        self.generate_file_perms(50)):
+            yield self.check_incorrect_file_mode, x, y
+
     def check_correct_file_mode(self, mode):
         m = stat.S_IMODE(int(str(mode), 8))
         os.chmod(self.file_that_exists, m)
-        ft = servercheck.FileTester(self.file_that_exists,
-                                    verbose=True)
+        ft = TestFileTester(self.file_that_exists)
         ft.mode(mode)
 
         self.log_capture.check(
@@ -123,137 +287,10 @@ class TestFile:
         for p in self.generate_file_perms(50):
             yield self.check_correct_file_mode, p
 
-    def test_incorrect_file_perms(self):
-        for x, y in zip(self.generate_file_perms(50),
-                        self.generate_file_perms(50)):
-            yield self.check_incorrect_file_mode, x, y
-
-    def test_true_file_is_file(self):
-        self.file_exists.is_file()
-
-        self.log_capture.check(
-            (self.log_name.format(self.file_that_exists),
-             'INFO',
-             self.pass_str.format(self.file_that_exists,
-                                  'is a regular file.')
-             ),
-        )
-
-    def test_false_symlink_is_file(self):
-        self.symlink.is_file()
-
-        self.log_capture.check(
-            (self.log_name.format(self.link),
-             'WARNING',
-             self.fail_str.format(self.link,
-                                  'is not a regular file. {} is a symlink.'.format(self.link))  # nopep8
-             ),
-        )
-
-    def test_false_file_is_file(self):
-        self.dir.is_file()
-
-        self.log_capture.check(
-            (self.log_name.format(self.tmpdir),
-             'WARNING',
-             self.fail_str.format(self.tmpdir,
-                                  'is not a regular file. {} is a directory.'.format(self.tmpdir))  # nopep8
-             ),
-        )
-
-    def test_true_file_is_dir(self):
-        self.dir.is_dir()
-
-        self.log_capture.check(
-            (self.log_name.format(self.tmpdir),
-             'INFO',
-             self.pass_str.format(self.tmpdir,
-                                  'is a directory.')
-             ),
-        )
-
-    def test_false_symlink_is_dir(self):
-        self.symlink.is_dir()
-
-        self.log_capture.check(
-            (self.log_name.format(self.link),
-             'WARNING',
-             self.fail_str.format(self.link,
-                                  'is not a directory. {} is a symlink.'.format(self.link))  # nopep8
-             ),
-        )
-
-    def test_false_file_is_dir(self):
-        self.file_exists.is_dir()
-
-        self.log_capture.check(
-            (self.log_name.format(self.file_that_exists),
-             'WARNING',
-             self.fail_str.format(self.file_that_exists,
-                                  'is not a directory. {} is a regular file.'.format(self.file_that_exists))  # nopep8
-             ),
-        )
-
-    def test_false_file_is_not_a_symlink(self):
-        self.file_exists.is_symlinked_to(self.file_that_exists)
-
-        self.log_capture.check(
-            (self.log_name.format(self.file_that_exists),
-             'WARNING',
-             self.fail_str.format(self.file_that_exists,
-                                  'is not a symlink.')
-             ),
-        )
-
-    def test_true_file_is_symlinked_to(self):
-        self.symlink.is_symlinked_to(self.file_that_exists)
-
-        self.log_capture.check(
-            (self.log_name.format(self.link),
-             'INFO',
-             self.pass_str.format(self.link,
-                                  'is symlinked to {}.'.format(self.file_that_exists))  # nopep8
-             ),
-        )
-
-    def test_false_file_is_symlinked_to(self):
-        self.symlink.is_symlinked_to(self.file_that_does_not_exist)  # nopep8
-
-        self.log_capture.check(
-            (self.log_name.format(self.link),
-             'WARNING',
-             self.fail_str.format(self.link,
-                                  'is not symlinked to {}.'.format(self.file_that_does_not_exist))  # nopep8
-             ),
-        )
-
-    def test_true_file_has_string(self):
-        self.file_exists.has_string(self.test_string)
-
-        self.log_capture.check(
-            (self.log_name.format(self.file_that_exists),
-             'INFO',
-             self.pass_str.format(self.file_that_exists,
-                                  'contains the string: "{}".'.format(self.test_string))  # nopep8
-             ),
-        )
-
-    def test_false_file_has_string(self):
-        self.file_exists.has_string(self.missing_string)
-
-        self.log_capture.check(
-            (self.log_name.format(self.file_that_exists),
-             'WARNING',
-             self.fail_str.format(self.file_that_exists,
-                                  'does not contain the string: "{}".'.format(self.missing_string))  # nopep8
-             ),
-        )
-
     def check_excecute_perms(self, p, u):
         os.chmod(self.file_that_exists, int(str(p), 8))
 
-        ft = servercheck.FileTester(self.file_that_exists,
-                                    verbose=True)
+        ft = TestFileTester(self.file_that_exists)
         ft.is_executable_by(u)
 
         if u == 'user':
@@ -283,3 +320,36 @@ class TestFile:
         for i in ['user', 'group', 'other']:
             for p in self.generate_file_perms(20):
                 yield self.check_excecute_perms, p, i
+
+    def test_file_has_string(self):
+        rand_string = ''.join(random.sample(string.ascii_letters, 20))
+        p = self.create_file('reg', content=rand_string)
+
+        filetester = TestFileTester(p)
+
+        filetester.contains_string(rand_string)
+
+        self.log_capture.check(
+            (
+                self.log_name.format(p),
+                'INFO',
+                self.pass_str.format(p, 'contains the string: "{}".'.format(rand_string))  # nopep8
+            )
+        )
+
+    def test_false_file_has_string(self):
+        string_in_file = ''.join(random.sample(string.ascii_letters, 20))
+        string_to_search_for = ''.join(random.sample(string.ascii_letters, 25))
+        p = self.create_file('reg', content=string_in_file)
+
+        filetester = TestFileTester(p)
+
+        filetester.contains_string(string_to_search_for)
+
+        self.log_capture.check(
+            (
+                self.log_name.format(p),
+                'WARNING',
+                self.fail_str.format(p, 'does not contain the string: "{}".'.format(string_to_search_for))  # nopep8
+            )
+        )
