@@ -251,24 +251,29 @@ class TestFile:
                    if x != 'missing']:
             yield self.check_true_is_symlinked_to, ft
 
-    def check_incorrect_file_mode(self, file_mode, test_mode):
-        m = stat.S_IMODE(int(str(file_mode), 8))
-        os.chmod(self.file_that_exists, m)
-        ft = TestFileTester(self.file_that_exists)
-        ft.mode(test_mode)
+    def check_incorrect_file_mode(self, ft, file_mode, test_mode):
+        p = self.create_file(ft, mode=file_mode)
+        filetester = TestFileTester(p)
+
+        filetester.mode(test_mode)
+
+        if ft == 'missing':
+            msg = 'does not exist.'
+        else:
+            msg = 'does not have expected permissions.'
 
         self.log_capture.check(
-            (self.log_name.format(self.file_that_exists),
+            (self.log_name.format(p),
              'WARNING',
-             self.fail_str.format(self.file_that_exists,
-                                  'does not have expected permissions.')
+             self.fail_str.format(p, msg)
              ),
         )
 
     def test_incorrect_file_perms(self):
-        for x, y in zip(self.generate_file_perms(50),
-                        self.generate_file_perms(50)):
-            yield self.check_incorrect_file_mode, x, y
+        for t in self._file_types:
+            for x, y in zip(self.generate_file_perms(50),
+                            self.generate_file_perms(50)):
+                yield self.check_incorrect_file_mode, t, x, y
 
     def check_correct_file_mode(self, mode):
         m = stat.S_IMODE(int(str(mode), 8))
