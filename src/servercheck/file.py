@@ -25,7 +25,7 @@ class FileTester(BaseTester):
         super().__init__(item=file_path, **kwargs)
 
         try:
-            self._stat = os.stat(self._file_path)
+            self._stat = os.lstat(self._file_path)
         except FileNotFoundError:
             self._stat = None
 
@@ -36,14 +36,6 @@ class FileTester(BaseTester):
     def failed(self, msg):
         super().failed('File {} {}'.format(self._file_path,
                                            msg))
-
-    def test_mask_perms(self, mask):
-
-        try:
-            return bool(self._stat.st_mode & mask)
-        except:
-            return False
-
     def exists(self):
         """Test if file exists
 
@@ -53,21 +45,31 @@ class FileTester(BaseTester):
         else:
             self.failed('does not exist.')
 
+    def is_symlink(self):
+
+        if not self._stat:
+            self.failed('does not exist.')
+            return
+
+        if stat.S_ISLNK(self._stat.st_mode):
+            self.passed('is a symlink.')
+        else:
+            self.failed('is not a symlink.')
+
     def is_file(self):
         """Tests if file is a regular file
 
 
         """
+        if not self._stat:
+            self.failed('does not exist.')
+            return
+
         if os.path.isfile(self._file_path) \
                 and not os.path.islink(self._file_path):
             self.passed('is a regular file.')
         else:
-            msg = 'is not a regular file. {} '.format(self._file_path)
-
-            if os.path.isdir(self._file_path):
-                msg += 'is a dir.'
-            elif os.path.islink(self._file_path):
-                msg += 'is a symlink.'
+            msg = 'is not a regular file.'
 
             self.failed(msg)
 
@@ -76,6 +78,10 @@ class FileTester(BaseTester):
 
 
         """
+        if not self._stat:
+            self.failed('does not exist.')
+            return
+
         if os.path.isdir(self._file_path) \
                 and not os.path.islink(self._file_path):
             self.passed('is a directory.')
@@ -121,7 +127,7 @@ class FileTester(BaseTester):
         else:
             self.failed('is not a symlink.')
 
-    def has_string(self, string):
+    def contains_string(self, string):
         """Tests if file has a line containing string.
 
 
