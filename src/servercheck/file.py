@@ -101,6 +101,10 @@ class FileTester(BaseTester):
 
 
         """
+        if not self._stat:
+            self.failed('does not exist.')
+            return
+
         file_perm = stat.S_IMODE(self._stat.st_mode)
         test_perm = stat.S_IMODE(int(str(mode), 8))
 
