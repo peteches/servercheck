@@ -60,11 +60,6 @@ class TestFile:
         }
 
     def setup(self):
-        self.file_exists = TestFileTester(self.file_that_exists)
-        self.file_does_not_exist = TestFileTester(self.file_that_does_not_exist)  # nopep8
-        self.dir = TestFileTester(self.tmpdir)
-        self.symlink = TestFileTester(self.link)
-
         self.log_capture = LogCapture()
 
     def teardown(self):
@@ -112,8 +107,14 @@ class TestFile:
 
         return path
 
-    def test_file_path_attribute(self):
-        assert_equal(self.file_exists._file_path, self.file_that_exists)
+    def check_file_path_attribute(self, ft):
+        p = self.create_file(ft)
+        filetester = TestFileTester(p)
+        assert_equal(filetester._file_path, p)
+
+    def test_file_path_attributes(self):
+        for i in self._file_types:
+            yield self.check_file_path_attribute, i
 
     def check_exists(self, file_type):
         p = self.create_file(ft=file_type)
