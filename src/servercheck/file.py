@@ -36,6 +36,7 @@ class FileTester(BaseTester):
     def failed(self, msg):
         super().failed('File {} {}'.format(self._file_path,
                                            msg))
+
     def exists(self):
         """Test if file exists
 
@@ -65,8 +66,7 @@ class FileTester(BaseTester):
             self.failed('does not exist.')
             return
 
-        if os.path.isfile(self._file_path) \
-                and not os.path.islink(self._file_path):
+        if stat.S_ISREG(self._stat.st_mode):
             self.passed('is a regular file.')
         else:
             msg = 'is not a regular file.'
@@ -82,8 +82,7 @@ class FileTester(BaseTester):
             self.failed('does not exist.')
             return
 
-        if os.path.isdir(self._file_path) \
-                and not os.path.islink(self._file_path):
+        if stat.S_ISDIR(self._stat.st_mode):
             self.passed('is a directory.')
         else:
             msg = 'is not a directory. {} '.format(self._file_path)
@@ -115,7 +114,7 @@ class FileTester(BaseTester):
 
 
         """
-        if os.path.islink(self._file_path):
+        if stat.S_ISLNK(self._stat.st_mode):
             real_path = os.path.realpath(self._file_path)
             test_path = os.path.realpath(dst)
 
