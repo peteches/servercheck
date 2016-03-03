@@ -48,7 +48,7 @@ class TestFile:
         self._file_types = ['reg',
                             'dir',
                             'symlink',
-                            'broken_symlink',
+                            'broken symlink',
                             'missing',
                             ]
 
@@ -56,7 +56,7 @@ class TestFile:
             'reg': 'regular file',
             'dir': 'directory',
             'symlink': 'symlink',
-            'broken_symlink': 'symlink',
+            'broken symlink': 'symlink',
         }
 
     def setup(self):
@@ -88,7 +88,7 @@ class TestFile:
             link_dst = tempfile.mkstemp(dir=self.tmpdir)[1]
             path = tempfile.mktemp(dir=self.tmpdir)
             os.symlink(link_dst, path)
-        elif ft == 'broken_symlink':
+        elif ft == 'broken symlink':
             link_dst = tempfile.mkstemp(dir=self.tmpdir)[1]
             path = tempfile.mktemp(dir=self.tmpdir)
             os.symlink(link_dst, path)
@@ -101,7 +101,7 @@ class TestFile:
             with open(path, 'w') as fd:
                 fd.write(content)
 
-        if ft not in ['missing', 'broken_symlink']:
+        if ft not in ['missing', 'broken symlink']:
             os.chmod(path,
                      int(str(mode), 8))
 
@@ -125,6 +125,9 @@ class TestFile:
         if file_type == 'missing':
             lvl = 'WARNING'
             msg = self.fail_str.format(p, 'does not exist.')
+        elif file_type == 'broken symlink':
+            lvl = 'WARNING'
+            msg = self.fail_str.format(p, 'is a broken symlink.')
         else:
             lvl = 'INFO'
             msg = self.pass_str.format(p, 'exists.')
@@ -150,6 +153,9 @@ class TestFile:
         elif file_type == 'missing':
             lvl = 'WARNING'
             msg = self.fail_str.format(p, 'does not exist.')
+        elif file_type == 'broken symlink':
+            lvl = 'WARNING'
+            msg = self.fail_str.format(p, 'is a broken symlink.')
         else:
             lvl = 'WARNING'
             msg = self.fail_str.format(p, 'is not a regular file.')
@@ -180,6 +186,9 @@ class TestFile:
         elif file_type == 'missing':
             lvl = 'WARNING'
             msg = self.fail_str.format(p, 'does not exist.')
+        elif file_type == 'broken symlink':
+            lvl = 'WARNING'
+            msg = self.fail_str.format(p, 'is a broken symlink.')
         else:
             lvl = 'WARNING'
             msg = self.fail_str.format(p, 'is not a directory.'
@@ -204,12 +213,15 @@ class TestFile:
 
         filetester = TestFileTester(p)
 
-        if file_type in ['symlink', 'broken_symlink']:
+        if file_type == 'symlink':
             lvl = 'INFO'
             msg = self.pass_str.format(p, 'is a symlink.')
         elif file_type == 'missing':
             lvl = 'WARNING'
             msg = self.fail_str.format(p, 'does not exist.')
+        elif file_type == 'broken symlink':
+            lvl = 'WARNING'
+            msg = self.fail_str.format(p, 'is a broken symlink.')
         else:
             lvl = 'WARNING'
             msg = self.fail_str.format(p, 'is not a symlink.')
@@ -248,50 +260,45 @@ class TestFile:
 
     def test_is_symlinked_to(self):
         for ft in [x for x in self._file_types
-                   if x != 'missing']:
+                   if x not in ['broken symlink',
+                                'missing']]:
             yield self.check_true_is_symlinked_to, ft
 
-    def check_incorrect_file_mode(self, ft, file_mode, test_mode):
+    def check_file_mode(self, ft, file_mode, test_mode):
         p = self.create_file(ft, mode=file_mode)
         filetester = TestFileTester(p)
 
         filetester.mode(test_mode)
 
         if ft == 'missing':
-            msg = 'does not exist.'
-        else:
-            msg = 'does not have expected permissions.'
+            lvl = 'WARNING'
+            msg = self.fail_str.format(p, 'does not exist.')
+        elif ft == 'broken symlink':
+            lvl = 'WARNING'
+            msg = self.fail_str.format(p, 'is a broken symlink.')
+        elif file_mode != test_mode:
+            lvl = 'WARNING'
+            msg = self.fail_str.format(p,
+                                       'does not have expected permissions.')
+        elif file_mode == test_mode:
+            lvl = 'INFO'
+            msg = self.pass_str.format(p, 'has correct perms.')
 
         self.log_capture.check(
             (self.log_name.format(p),
-             'WARNING',
-             self.fail_str.format(p, msg)
+             lvl,
+             msg,
              ),
         )
 
-    def test_incorrect_file_perms(self):
+    def test_file_perms(self):
         for t in self._file_types:
             for x, y in zip(self.generate_file_perms(50),
                             self.generate_file_perms(50)):
-                yield self.check_incorrect_file_mode, t, x, y
+                yield self.check_file_mode, t, x, y
 
-    def check_correct_file_mode(self, mode):
-        m = stat.S_IMODE(int(str(mode), 8))
-        os.chmod(self.file_that_exists, m)
-        ft = TestFileTester(self.file_that_exists)
-        ft.mode(mode)
-
-        self.log_capture.check(
-            (self.log_name.format(self.file_that_exists),
-             'INFO',
-             self.pass_str.format(self.file_that_exists,
-                                  'has correct perms.')
-             ),
-        )
-
-    def test_correct_file_perms(self):
-        for p in self.generate_file_perms(50):
-            yield self.check_correct_file_mode, p
+            for p in self.generate_file_perms(50):
+                yield self.check_file_mode, t, p, p
 
     def check_excecute_perms(self, p, u):
         os.chmod(self.file_that_exists, int(str(p), 8))

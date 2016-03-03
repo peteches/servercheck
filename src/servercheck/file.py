@@ -24,10 +24,30 @@ class FileTester(BaseTester):
         self._file_path = file_path
         super().__init__(item=file_path, **kwargs)
 
+        self._stat = None
+
+        self._ftypes = {
+            'BLK': 'block device',
+            'CHR': 'character device',
+            'DIR': 'directory',
+            'REG': 'regular file',
+            'FIFO': 'fifo',
+            'LNK': 'symlink',
+            'SOCK': 'socket',
+            'DOOR': 'door',
+            'PORT': 'event port',
+            'WHT': 'whiteout',
+        }
+
         try:
-            self._stat = os.lstat(self._file_path)
+            self._stat = os.stat(self._file_path)
         except FileNotFoundError:
-            self._stat = None
+            try:
+                os.lstat(self._file_path)
+            except FileNotFoundError:
+                self.failed('does not exist.')
+            else:
+                self.failed('is a broken symlink.')
 
     def passed(self, msg):
         super().passed('File {} {}'.format(self._file_path,
@@ -37,23 +57,36 @@ class FileTester(BaseTester):
         super().failed('File {} {}'.format(self._file_path,
                                            msg))
 
+    @property
+    def _type(self):
+        if not self._stat:
+            try:
+                os.lstat(self._file_path)
+            except FileNotFoundError:
+                return 'missing'
+            else:
+                return 'broken symlink'
+        elif os.path.islink(self._file_path):
+            return self._ftypes['LNK']
+        else:
+            for t in self._ftypes.keys():
+                if getattr(stat, 'S_IS{}'.format(t))(self._stat.st_mode):
+                    return self._ftypes[t]
+                    break
+
     def exists(self):
         """Test if file exists
 
         """
-        if self._stat:
+        if self._type not in ['missing', 'broken symlink']:
             self.passed('exists.')
-        else:
-            self.failed('does not exist.')
 
     def is_symlink(self):
 
-        if not self._stat:
-            self.failed('does not exist.')
-            return
-
-        if stat.S_ISLNK(self._stat.st_mode):
+        if self._type == self._ftypes['LNK']:
             self.passed('is a symlink.')
+        elif self._type in ['missing', 'broken symlink']:
+            return
         else:
             self.failed('is not a symlink.')
 
@@ -62,12 +95,10 @@ class FileTester(BaseTester):
 
 
         """
-        if not self._stat:
-            self.failed('does not exist.')
-            return
-
-        if stat.S_ISREG(self._stat.st_mode):
+        if self._type == self._ftypes['REG']:
             self.passed('is a regular file.')
+        elif self._type in ['missing', 'broken symlink']:
+            return
         else:
             msg = 'is not a regular file.'
 
@@ -78,12 +109,11 @@ class FileTester(BaseTester):
 
 
         """
-        if not self._stat:
-            self.failed('does not exist.')
-            return
 
-        if stat.S_ISDIR(self._stat.st_mode):
+        if self._type == self._ftypes['DIR']:
             self.passed('is a directory.')
+        elif self._type in ['missing', 'broken symlink']:
+            return
         else:
             msg = 'is not a directory. {} '.format(self._file_path)
 
@@ -101,11 +131,11 @@ class FileTester(BaseTester):
 
 
         """
-        if not self._stat:
-            self.failed('does not exist.')
+        if self._type in ['missing', 'broken symlink']:
             return
 
         file_perm = stat.S_IMODE(self._stat.st_mode)
+
         test_perm = stat.S_IMODE(int(str(mode), 8))
 
         if file_perm == test_perm:
@@ -118,7 +148,10 @@ class FileTester(BaseTester):
 
 
         """
-        if stat.S_ISLNK(self._stat.st_mode):
+        if self._type in ['missing', 'broken symlink']:
+            return
+
+        if self._type == self._ftypes['LNK']:
             real_path = os.path.realpath(self._file_path)
             test_path = os.path.realpath(dst)
 
@@ -135,12 +168,18 @@ class FileTester(BaseTester):
 
 
         """
+        if self._type in ['missing', 'broken symlink']:
+            return
+
         if string in open(self._file_path, 'r').read():
             self.passed('contains the string: "{}".'.format(string))
         else:
             self.failed('does not contain the string: "{}".'.format(string))
 
     def is_executable_by(self, x):
+        if self._type in ['missing', 'broken symlink']:
+            return
+
         file_perm = stat.S_IMODE(self._stat.st_mode)
 
         if x == 'user':
