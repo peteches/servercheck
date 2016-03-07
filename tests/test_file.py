@@ -7,6 +7,7 @@ import itertools
 import stat
 import random
 import string
+import pwd
 
 from nose.tools import *
 from testfixtures import LogCapture
@@ -366,3 +367,78 @@ class TestFile:
                 self.fail_str.format(p, 'does not contain the string: "{}".'.format(string_to_search_for))  # nopep8
             )
         )
+
+    def check_owner_is(self, path, user, expected_result):
+        filetester = TestFileTester(path)
+
+        filetester.owner_is(user)
+
+        if expected_result:
+            lvl = 'INFO'
+            msg = self.pass_str.format(path, 'is owned by {}.'.format(user))
+        else:
+            lvl = 'WARNING'
+            msg = self.fail_str.format(path,
+                                       'is not owned by {}.'.format(user))
+
+        self.log_capture.check(
+            (
+                self.log_name.format(path),
+                lvl,
+                msg,
+            ),
+        )
+
+    def check_owner_is_args(self, user):
+        fail_str = '\033[1;31mFAIL: {}\033[0m'
+
+        p = self.create_file()
+        filetester = TestFileTester(p)
+
+        try:
+            if user.isdigit():
+                user = int(user)
+                msg = self.fail_str.format(p, 'no such uid {}.'.format(user))
+            else:
+                msg = self.fail_str.format(p, 'no such user {}.'.format(user))
+        except AttributeError:
+            msg = fail_str.format('Expected user described as int (uid) or str (user name).')  # nopep8
+
+        filetester.owner_is(user)
+
+        self.log_capture.check(
+            (
+                self.log_name.format(p),
+                'WARNING',
+                msg,
+            ),
+        )
+
+    def test_file_ownership(self):
+
+        users = [
+            pwd.getpwuid(os.getuid()),
+            pwd.getpwnam('root'),
+        ]
+
+        for f in [x.pw_dir for x in users]:
+            fuid = os.stat(f).st_uid
+            for u in [y.pw_uid for y in users]:
+                if fuid == u:
+                    b = True
+                else:
+                    b = False
+                yield self.check_owner_is, f, u, b
+
+            for u in [y.pw_name for y in users]:
+                if fuid == pwd.getpwnam(u).pw_uid:
+                    b = True
+                else:
+                    b = False
+                yield self.check_owner_is, f, u, b
+
+        users = ['fdls', 'lpok']
+        uids = ['7876', '9098', '8876']
+
+        for u in users + uids:
+            yield self.check_owner_is_args, u
