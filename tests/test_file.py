@@ -8,6 +8,7 @@ import stat
 import random
 import string
 import pwd
+import grp
 
 from nose.tools import *
 from testfixtures import LogCapture
@@ -414,7 +415,7 @@ class TestFile:
             ),
         )
 
-    def test_file_ownership(self):
+    def test_file_owner_is(self):
 
         users = [
             pwd.getpwuid(os.getuid()),
@@ -442,3 +443,85 @@ class TestFile:
 
         for u in users + uids:
             yield self.check_owner_is_args, u
+
+    def check_group_is(self, path, grp, expected_result):
+        filetester = TestFileTester(path)
+
+        filetester.group_is(grp)
+
+        if expected_result:
+            lvl = 'INFO'
+            msg = self.pass_str.format(path, 'is group owned by {}.'.format(grp))
+        else:
+            lvl = 'WARNING'
+            msg = self.fail_str.format(path,
+                                       'is not group owned by {}.'.format(grp))
+
+        self.log_capture.check(
+            (
+                self.log_name.format(path),
+                lvl,
+                msg,
+            ),
+        )
+
+    def check_group_is_args(self, grp):
+        fail_str = '\033[1;31mFAIL: {}\033[0m'
+
+        p = self.create_file()
+
+        filetester = TestFileTester(p)
+
+        try:
+            if grp.isdigit():
+                grp = int(grp)
+                msg = self.fail_str.format(p, 'no such gid {}.'.format(grp))
+            else:
+                msg = self.fail_str.format(p, 'no such group {}.'.format(grp))
+
+        except AttributeError:
+            msg = fail_str.format('Expected group described as int (gid) or str (group name).')  # nopep8
+
+        filetester.group_is(grp)
+
+        self.log_capture.check(
+            (
+                self.log_name.format(p),
+                'WARNING',
+                msg,
+            ),
+        )
+
+    def test_file_group_is(self):
+
+        groups = [
+            grp.getgrgid(os.getgid()),
+            grp.getgrnam('root'),
+        ]
+
+        paths = [
+            pwd.getpwuid(os.getuid()).pw_dir,
+            '/root',
+        ]
+
+        for f in paths:
+            fgid = os.stat(f).st_gid
+            for g in [y.gr_gid for y in groups]:
+                if fgid == g:
+                    b = True
+                else:
+                    b = False
+                yield self.check_group_is, f, g, b
+
+            for g in [y.gr_name for y in groups]:
+                if fgid == pwd.getpwnam(g).pw_gid:
+                    b = True
+                else:
+                    b = False
+                yield self.check_group_is, f, g, b
+
+        groups = ['fdls', 'lpok']
+        gids = ['7876', '9098', '8876']
+
+        for g in groups + gids:
+            yield self.check_group_is_args, g
