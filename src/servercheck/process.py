@@ -35,3 +35,16 @@ class ProcessTester(BaseTester):
             self.passed('is running.')
         else:
             self.failed('is not running.')
+
+    def is_running_as(self, user):
+        users = set([x['username'] for x in self.processes
+                     if x['username'] == user])
+
+        if len(users) == 0:
+            self.failed('is not running as {}.'.format(user))
+        elif len(users) == 1:
+            self.passed('is running as {}.'.format(user))
+
+        else:
+
+            self.failed('Some process run as {}.'.format(user))

@@ -2,6 +2,10 @@ import psutil
 import logging
 import subprocess as sp
 import servercheck
+import pwd
+import itertools
+import random
+import os
 
 from nose.tools import *
 from testfixtures import LogCapture
@@ -95,3 +99,40 @@ class TestProcess:
 
         for p in self.fake_processes:
             yield self.check_process_is_running, p
+
+    def check_running_as(self, pname, test_user, exp_user):
+
+        pt = TestProcessTester(pname)
+
+        if test_user == exp_user:
+            lvl = 'INFO'
+            msg = self.pass_str.format(pname,
+                                       'is running as {}.'.format(test_user))
+        else:
+            lvl = 'WARNING'
+            msg = self.fail_str.format(pname,
+                                       'is not running as {}.'.format(test_user))  # nopep8
+
+        pt.is_running_as(test_user)
+
+        self.log_capture.check(
+            (
+                self.log_name.format(pname),
+                lvl,
+                msg,
+            ),
+        )
+
+    def test_running_as(self):
+        current_user = pwd.getpwuid(os.getuid()).pw_name
+        for p in [x[0] for x in self.processes]:
+            for u in ['root', current_user]:
+                yield self.check_running_as, p, u, current_user
+        rp = sp.Popen(['ps', '-U', 'root', '-o', 'comm'], stderr=sp.PIPE,
+                      stdout=sp.PIPE).stdout.read()
+        root_procs = random.sample([x for x in str(rp).split('\\n')
+                                    if not x.count('/') and not x.count('[') and  not x.count('CMD')],
+                                   2)
+        for p in root_procs:
+            for u in ['root', current_user]:
+                yield self.check_running_as, p, u, 'root'
