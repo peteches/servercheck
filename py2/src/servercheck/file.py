@@ -3,6 +3,8 @@
 
 import os
 import stat
+import grp
+import pwd
 
 from servercheck.base import BaseTester
 
@@ -191,3 +193,47 @@ class FileTester(BaseTester):
             self.passed('is executable by {}.'.format(x))
         else:
             self.failed('is not executable by {}.'.format(x))
+
+    def owner_is(self, u):
+        pwstruct = None
+        try:
+            pwstruct = pwd.getpwuid(u)
+        except TypeError:
+            try:
+                pwstruct = pwd.getpwnam(u)
+            except KeyError:
+                self.failed('no such user {}.'.format(u))
+                return
+            except TypeError:
+                super().failed('Expected user described as int (uid) or str (user name).')
+                return
+        except KeyError:
+            self.failed('no such uid {}.'.format(u))
+            return
+
+        if pwstruct.pw_uid == self._stat.st_uid:
+            self.passed('is owned by {}.'.format(u))
+        else:
+            self.failed('is not owned by {}.'.format(u))
+
+    def group_is(self, g):
+        grstruct = None
+        try:
+            grstruct = grp.getgrgid(g)
+        except ValueError:
+            try:
+                grstruct = grp.getgrnam(g)
+            except KeyError:
+                self.failed('no such group {}.'.format(g))
+                return
+            except TypeError:
+                super().failed('Expected group described as int (gid) or str (group name).')
+                return
+        except KeyError:
+            self.failed('no such gid {}.'.format(g))
+            return
+
+        if grstruct.gr_gid == self._stat.st_gid:
+            self.passed('is group owned by {}.'.format(g))
+        else:
+            self.failed('is not group owned by {}.'.format(g))

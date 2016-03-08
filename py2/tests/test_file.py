@@ -17,9 +17,9 @@ class TestFileTester(servercheck.FileTester):
     __test__ = False
 
     def __init__(self, fp, **kwargs):
-        super().__init__(fp,
-                         verbose=True,
-                         **kwargs)
+        super(TestFileTester, self).__init__(fp,
+                                             verbose=True,
+                                             **kwargs)
 
 
 class TestFile:
