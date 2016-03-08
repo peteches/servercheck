@@ -130,7 +130,7 @@ class TestProcess:
                 yield self.check_running_as, p, u, current_user
         rp = sp.Popen(['ps', '-U', 'root', '-o', 'comm'], stderr=sp.PIPE,
                       stdout=sp.PIPE).stdout.read()
-        root_procs = random.sample([x for x in str(rp).split('\\n')
+        root_procs = random.sample([x for x in str(rp).split('\n')
                                     if not x.count('/') and not x.count('[') and  not x.count('CMD')],
                                    2)
         for p in root_procs:
