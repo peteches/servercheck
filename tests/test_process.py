@@ -32,7 +32,6 @@ class TestProcess:
         self.processes = [
             ['sleep', '200'],
             ['yes', 'TESTING'],
-            ['dd', 'if=/dev/urandom', 'of=/dev/null'],
         ]
 
         self.fake_processes = [
